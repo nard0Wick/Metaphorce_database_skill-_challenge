@@ -94,16 +94,19 @@ create table request_details(
 );
 
 --creating unlogged table for storing tokens
-drop unlogged table if exists user_tokens;
+drop table if exists user_tokens;
 create unlogged table user_tokens(
 	user_id int references users(id) on delete cascade,
 	token text,
+	created_at timestamp,
+	checked_at timestamp default null,
+	is_checked boolean default false,
 	primary key (user_id)
 );
 --inserts
 drop function if exists insert_new_user;
-create function insert_new_user(user_name varchar(180), last_name varchar(180), email varchar(180), user_password varchar(30))
-returns text as $$ 
+/*
+create function insert_new_user(user_name varchar(180), last_name varchar(180), email varchar(180), user_password varchar(30))returns text as $$ 
 declare 
 	user_token text;
 	user_id int;
@@ -116,8 +119,42 @@ begin
 	return user_token;
 end;
 $$ language plpgsql;
+*/
+drop function if exists generate_token;
+create function generate_token(user_name varchar(180), last_name varchar(180), email varchar(180))
+returns text as $$
+declare
+	token text;
+	user_id int;
+begin
+	token := pgp_sym_encrypt(user_name || last_name || email, 'AES_KEY');
+	user_id := select id from users where email = email;
+	insert into user_tokens(user_id, token, created_at) values(user_id, token, current_timestamp);
+	return token;
+end;
+$$ language plpgsql;
+
+drop function if exists validate_token;
+create function validate_token(user_token text)
+returns text as $$
+declare
+	old_ timestamp;
+	token text;
+begin 
+	token := pgp_sym_decrypt(user_token::bytea, 'AES_KEY');
+	old_ := 
+	return token;
+end;
+$$ language plpgsql;
+
+select generate_token('pedro', 'perez', 'pp@gmail.com');
+select validate_token('\xc30d04070302d896d6ee4afa50737ed26401f3c6a791d28cfc12b09d7c1b8e452cc441622b454d2b7c5666e21a5c1b3f86dca2385d4b56441054e3cbd9f5a43d0e4b6995a022baf1decf1a347fd27424c7e44d3b7cda1e71713b89042dad28aaceaef5535f9a923d7f92e3c7392c229575887ff405');
+
+--select substring('pedroperezpp@gmail.com2025-05-23 23:05:10.399322-06' similar to current_time::text || '%');
 
 select insert_new_user('Miguel', 'Pradera', 'miguelpradera@gmail.com', 'pass123');
+
+select current_timestamp + make_interval(mins => 5);
 
 
 --select sum(0.1::numeric) from generate_series(1, 10);
