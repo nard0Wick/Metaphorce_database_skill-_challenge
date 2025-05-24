@@ -8,7 +8,7 @@ drop table profile_pictures;
 drop table buildings cascade;
 drop table departments cascade;
 drop table integrants;
-drop table public.integrants_roles;
+drop table integrants_roles;
 drop table requests cascade;
 drop table request_details;
 
@@ -19,7 +19,7 @@ create table users(
 	email varchar(180) unique not null,
 	user_password varchar(30) not null,
 	created_at timestamp not null,
-	is_active boolean not null
+	is_active boolean default false
 );
 drop index if exists idx_email;
 create index if not exists idx_email on users using hash (email);
@@ -104,7 +104,7 @@ create unlogged table user_tokens(
 	primary key (user_id)
 );
 --inserts
-drop function if exists insert_new_user;
+--drop function if exists insert_new_user;
 /*
 create function insert_new_user(user_name varchar(180), last_name varchar(180), email varchar(180), user_password varchar(30))returns text as $$ 
 declare 
@@ -121,14 +121,14 @@ end;
 $$ language plpgsql;
 */
 drop function if exists generate_token;
-create function generate_token(user_name varchar(180), last_name varchar(180), email varchar(180))
+create function generate_token(user_name varchar(180), last_name varchar(180), user_email varchar(180))
 returns text as $$
 declare
 	token text;
 	user_id int;
 begin
-	token := pgp_sym_encrypt(user_name || last_name || email, 'AES_KEY');
-	user_id := select id from users where email = email;
+	token := pgp_sym_encrypt('username:' || user_name || ' ' || last_name || ' ' || email, 'AES_KEY');
+	select id into user_id from users  where email = user_email;
 	insert into user_tokens(user_id, token, created_at) values(user_id, token, current_timestamp);
 	return token;
 end;
@@ -136,21 +136,44 @@ $$ language plpgsql;
 
 drop function if exists validate_token;
 create function validate_token(user_token text)
-returns text as $$
+returns void as $$
 declare
 	old_ timestamp;
 	token text;
+	email varchar(180);
+	user_id int;
 begin 
 	token := pgp_sym_decrypt(user_token::bytea, 'AES_KEY');
-	old_ := 
-	return token;
+	email := substring(token, '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')::varchar(180);
+	select id into user_id from users where email = email;
+	if (user_id is null) is not false then
+		select created_at into old_ from user_tokens where user_id = user_id;
+		if extract (epoch from (current_timestamp - old_)) / 60 < 3 then
+			update user_tokens
+			set checked_at = current_timestamp, is_checked = true
+			where user_id = user_id;
+			update user 
+			set is_active = true
+		end if;
+	end if;
 end;
 $$ language plpgsql;
+
+drop function if exists insert_user;
+create function insert_user(user_name varchar(180), last_name varchar(180), user_email varchar(180), user_password varchar(30))
+returns void as $$
+declare
+	
+begin
+	insert into users (user_name, last_name, user_email, user_password, created_at)
+end;
+$$ language plpgsql;
+
 
 select generate_token('pedro', 'perez', 'pp@gmail.com');
 select validate_token('\xc30d04070302d896d6ee4afa50737ed26401f3c6a791d28cfc12b09d7c1b8e452cc441622b454d2b7c5666e21a5c1b3f86dca2385d4b56441054e3cbd9f5a43d0e4b6995a022baf1decf1a347fd27424c7e44d3b7cda1e71713b89042dad28aaceaef5535f9a923d7f92e3c7392c229575887ff405');
 
---select substring('pedroperezpp@gmail.com2025-05-23 23:05:10.399322-06' similar to current_time::text || '%');
+select substring('pedroperezpp@gmail.com 2025-05-23 23:05:10.399322-06', '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}');
 
 select insert_new_user('Miguel', 'Pradera', 'miguelpradera@gmail.com', 'pass123');
 
