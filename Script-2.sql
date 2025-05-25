@@ -37,7 +37,7 @@ create table buildings(
 	state varchar(90) not null,
 	city varchar(90) not null,
 	address varchar(180) not null,
-	is_available boolean not null
+	is_available boolean default true not null
 );
 
 drop index if exists idx_building_reference;
@@ -80,8 +80,8 @@ create table requests(
 	id int generated always as identity primary key,
 	user_id int not null,
 	ordered_date timestamp not null,
-	completed_on timestamp not null,
-	is_satisfied boolean default false not null,
+	completed_on timestamp,
+	is_satisfied boolean default false,
 	constraint fk_user foreign key (user_id) references users(id) on delete cascade
 );
 
@@ -167,16 +167,13 @@ begin
 	encripted_password := pgp_sym_encrypt(user_password, 'AES_KEY');
 	insert into users (user_name, last_name, email, user_password, created_at) values(user_name, last_name, email, encripted_password, current_timestamp);
 	return generate_token(user_name, last_name, email);
-	/*token := generate_token(user_name, last_name, email);
-	select u.id into user_id from users u where u.email = email;
-	insert into user_tokens(user_id, token, created_at) values(user_id, token, current_timestamp);*/
 end;
 $$ language plpgsql;
 
 --user insertions
 --in order to be able of validating a token, you must execute one insertion at a time, then take the token and validate it
 select insert_user('Miguel', 'Juárez', 'migueljuarez@gmail.com', 'MysuperPassword');
-select validate_token('\xc30d040703029707eb412efb9f0a74d2570141d3fb90c531a919a620d84e89cd787f461f943a53b06bd9355e439c60225b98d6816ddeabfa63b25a05b17ba3626ca888150d029b1e6b18d3c9743e8c799b538f18e5eb9a236be9230f1ee8930d512f99f6891394ce');
+select validate_token('\xc30d040703023ab80b1b5d1fd1727bd2570152d5e10e4b4f7a25cef0bf1c78ae09d41e9f06bff0dd8751010c5824be11de532fc5d84a0b4f36e163c96087265ad92db78370f519d19bb7322dfb11d80aeda3a353d89782ba9f051af8990d6095435991a3e3f66796');
 --checking for account_validation on user and user_tokens tables
 select u.user_name, u.last_name, u.email, u.is_active, u_t.created_at, u_t.checked_at, u_t.is_checked 
 from users u, user_tokens u_t
@@ -185,33 +182,61 @@ where u.id = u_t.user_id;
 select insert_user('Pedro', 'Prieto', 'pedroprieto@gmail.com', 'noPassword');
 --requesting a new token
 select generate_token('Pedro', 'Prieto', 'pedroprieto@gmail.com');
-select validate_token('\xc30d04070302d6891cbc67570f607ed254019adc39b909a14e25ac004d02d5acb503424d459aa47834c38e2a71731f22c457688c43c6f6dae5bb6b4b6e00643c467f3a7f7c73e0df52ecd716f70166eb21c2cace3b98166095eab0308fc74152ccae1868e4');
+select validate_token('\xc30d04070302b0d997f72bb839207fd2540193e5a23161fb4bcfa1ce23c2ee70dae0125f225ed66b9fe0a0158fbf6aec96e0368f3e0c03b300cc970ead4e88884e352d9e7fef55767be9885c94e2d667415b6df2f6c1e93c1ec7749fbeb86119986f97b3bc');
 --if the token expires account activation won't be successful
 select u.user_name, u.last_name, u.email, u.is_active, u_t.created_at, u_t.checked_at, u_t.is_checked 
 from users u, user_tokens u_t
 where u.id = u_t.user_id;
 
-/*select * from users;
+--building insertions
+insert into buildings (building_reference, postal_code, state, city, address, is_available)
+values ('Institución', '37000', 'Guanajuato', 'León', 'smt', true), ('Institución 2', '37000', 'Guanajuato', 'León', 'smt', true);
+--looking at buildings
+select * from buildings limit 2;
 
-select  insert_user('Uzzy', 'Zaz', 'uz@gmail.com', 'pass123');
-select generate_token('Uzzy', 'Zaz', 'uz@gmail.com');
-select validate_token('\xc30d04070302e35bb9d8dfbc5cc77bd24701cde4bb1a682d8d0d020813e0cb5f355e039e2701b3b826b611532a8bfd16d993799fd6f345db4a96fd0a4049c2044b3943e5fea6ca74f780fb4d66a523821599dde4595b5a46');
+--department insertions 
+insert into departments (building_id, department_name, description, status)
+values (1, 'Interrelaciones', 'smt', true), (1, 'Marketing', 'smt', true), (2, 'Soporte técnico', 'smt', true);
+--looking at buildings and departments
+select b.building_reference, b.postal_code, d.department_name, d.description 
+from buildings b, departments d 
+where b.id = d.building_id;
 
-select * from users;
-select * from user_tokens;
+--integrant_roles insertions
+insert into integrant_roles(role) 
+values('Jefe'), ('Asistente');
 
-select insert_user('Miguel', 'Quezada', 'miguelquezada@gmail.com', 'pass123');
-select generate_token('Miguel', 'Quezada', 'miguelquezada@gmail.com');
+--integrants insertions
+insert into integrants (user_id, department_id, building_id, integrant_role_id)
+values(1, 3, 1, 2), (2, 3, 1, 1);
 
-select generate_token('pedro', 'perez', 'pp@gmail.com');
-select validate_token('\xc30d04070302d896d6ee4afa50737ed26401f3c6a791d28cfc12b09d7c1b8e452cc441622b454d2b7c5666e21a5c1b3f86dca2385d4b56441054e3cbd9f5a43d0e4b6995a022baf1decf1a347fd27424c7e44d3b7cda1e71713b89042dad28aaceaef5535f9a923d7f92e3c7392c229575887ff405');
+--request insertions
+insert into requests (user_id, ordered_date)
+values(1, current_timestamp);
 
-select substring('pedroperezpp@gmail.com 2025-05-23 23:05:10.399322-06', '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}');
+--request details insertions
+insert into request_details(request_id, product_reference, quantity)
+values (1, 'a', 3), (1, 'b', 1), (1, 'c', 2);
 
-select insert_new_user('Miguel', 'Pradera', 'miguelpradera@gmail.com', 'pass123');
+--view for requests 
+drop view if exists requests_from_users;
+create view requests_from_users as
+select u.user_name, u.last_name, d.department_name, b.building_reference, b.postal_code, r.ordered_date, r.is_satisfied, r_d.product_reference, r_d.quantity
+from users u, departments d, buildings b, requests r, request_details r_d, integrants i
+where u.id = r.user_id and r_d.request_id = r.id and u.id = i.user_id and i.building_id = b.id and i.department_id = d.id;
 
-select current_timestamp + make_interval(mins => 5);*/
+select * from requests_from_users;
+
+--updating requests
+update requests 
+set completed_on = current_timestamp, is_satisfied = true 
+where id = 1;
+
+--removing completed requests
+delete from requests 
+where is_satisfied = true and extract (epoch from (current_timestamp - completed_on)) / 86400 ::int < 21;
+--86400 21
+
+select * from requests;
 
 
---select sum(0.1::numeric) from generate_series(1, 10);
---show timezone;
